@@ -1,0 +1,514 @@
+========================================================================
+ VAULT — a personal encrypted file vault for Windows
+ A plain-text tutorial
+========================================================================
+
+`vault` is a command-line tool. It moves files out of their normal
+location into an encrypted vault so they genuinely vanish from the
+folder they came from, and puts them back exactly where they were when
+you ask for them.
+
+Everything is encrypted with your master password. Nothing is merely
+renamed, hidden, or moved into a concealed folder — the bytes on disk
+are unreadable without your password.
+
+
+------------------------------------------------------------------------
+ 1. BUILD IT
+------------------------------------------------------------------------
+
+You need Rust installed (https://rustup.rs). Then, from this folder:
+
+    cargo build --release
+
+The result is a single self-contained executable:
+
+    target\release\vault.exe
+
+It has no runtime dependencies. Copy it anywhere you like — a USB
+stick, your PATH, wherever. All examples below assume it is on your
+PATH as `vault`. If it is not, replace `vault` with the full path.
+
+To confirm it works:
+
+    vault --version
+
+To see every command:
+
+    vault --help
+
+
+------------------------------------------------------------------------
+ 2. FIRST RUN — CREATE YOUR VAULT
+------------------------------------------------------------------------
+
+    vault init
+
+It will ask for a new master password twice. Type something long —
+this password is the only thing standing between a thief and your
+files, and there is no way to reset it.
+
+Real output:
+
+    Vault created at C:\Users\you\.vault
+
+    RECOVERY KEY — write this down and store it offline
+    ---------------------------------------------
+      064b4b7e
+      1ed2e474
+      989511d1
+      32c6cc1e
+      0102437c
+      0acb9c86
+      c1d71419
+      d33d887a
+    ---------------------------------------------
+
+    This is the ONLY way back in if you forget your master password.
+    It is not stored on disk. If you lose both, the files are gone.
+
+    Try it now:  vault list
+
+*** DO THIS NOW: write the recovery key down on paper and store it
+    somewhere safe and offline. ***
+
+It is 64 hexadecimal characters. It is shown in blocks of 8 so you can
+transcribe it without losing your place. If you would rather have it as
+one unbroken line — for pasting into a password manager — use:
+
+    vault init --raw
+
+The recovery key is a full alternative key: it opens the vault exactly
+like the master password does. It is never written to disk. That is why
+the warning is blunt. Forget the password AND lose the key and your
+files are gone for good — there is no back door, by design.
+
+Where the vault lives:
+
+    C:\Users\you\.vault
+
+containing:
+
+    vault.hdr              the vault header (small, fixed 180 bytes)
+    objects\XXXXXXXXXX.enc one encrypted file each
+
+To put it somewhere else, pass `--vault` or set VAULT_DIR:
+
+    vault --vault "D:\backup\myvault" init
+
+
+------------------------------------------------------------------------
+ 3. HIDING A FILE
+------------------------------------------------------------------------
+
+    vault hide "C:\Users\you\Documents\passport-scan.png"
+
+Real output:
+
+    hid  passport-scan.png
+
+    1 hidden, 0 failed, 1 total in vault
+
+Check it yourself — the file is gone from Documents:
+
+    dir C:\Users\you\Documents\passport-scan.png
+    → File Not Found
+
+The encrypted copy is now at .vault\objects\90f3b260f8.enc. The random
+10-character name tells you nothing: the original filename, the folder
+it came from, the file size category, the timestamps — all of it is
+inside the encryption. Run `strings` over that file and you will find
+nothing at all.
+
+Hide several at once:
+
+    vault hide "a.jpg" "b.mp4" "report.pdf"
+
+Hide a whole folder — it is walked for you, recursively:
+
+    vault hide "C:\Users\you\Documents\trip"
+
+    hid  a.jpg
+    hid  b.jpg
+
+    2 hidden, 0 failed, 2 total in vault
+
+Hide by wildcard (the tool expands globs itself, because PowerShell
+and cmd do not do it the way Unix shells do):
+
+    vault hide "C:\Users\you\Downloads\*.pdf"
+
+    vault.exe : error: pattern `C:\...\*.pdf` matched nothing
+
+If a pattern matches nothing you get an error rather than silence, so
+a typo never looks like success.
+
+Want a copy hidden but the original left in place? Use `--copy`:
+
+    vault hide --copy "C:\Users\you\Documents\draft.txt"
+
+The original stays where it is and an encrypted copy enters the vault.
+
+IMPORTANT: `hide` deletes the original after the encrypted copy is
+written and synced to disk. If it cannot securely delete the original,
+it reports failure and the original stays put. It never deletes first.
+
+
+------------------------------------------------------------------------
+ 4. SEEING WHAT IS INSIDE
+------------------------------------------------------------------------
+
+    vault list
+
+Real output:
+
+    ID          NAME                     SIZE  HIDDEN
+    ----------  -----------------  ----------  ------------
+    90f3b260f8  passport-scan.png        19 B  just now
+
+    1 entries, 19 B total
+
+`list` needs your password, because the names and paths are encrypted.
+That is intentional: a stranger who finds your vault cannot even see
+what you are hiding.
+
+Show full details of one entry:
+
+    vault show 90f3b260f8
+
+    ID            4020b8030b
+    Name          passport-scan.png
+    Original path \\?\C:\Users\you\Documents\passport-scan.png
+    Size          19 B (19 bytes)
+    Vault object  C:\Users\you\.vault\objects\4020b8030b.enc (237 B)
+    Extension     png
+    Hidden at     2026-10-18 05:24
+    Modified at   2026-10-18 05:24
+
+Note that "Modified at" is the file's own original timestamp — `hide`
+preserves it, and `release` puts it back, so a restored file does not
+look freshly created.
+
+You rarely need the full ID. Any unambiguous prefix works:
+
+    vault show 90f3
+    vault release 90f3
+
+If a prefix matches more than one entry, the tool refuses and asks for
+more characters rather than guessing which file you meant.
+
+Two more views for `list`:
+
+    vault list --paths     also show where each file came from
+    vault list --plain     one entry per line, tab-separated, for scripts
+
+`--plain` output looks like this:
+
+    90f3b260f8  19  1792301042  passport-scan.png  \\?\C:\...\passport-scan.png
+
+(fields: ID, size, hidden-epoch-seconds, name, original path)
+
+
+------------------------------------------------------------------------
+ 5. GETTING A FILE BACK
+------------------------------------------------------------------------
+
+`release` is the one verb that restores anything. It decrypts the entry
+and writes the file back to the exact path it was hidden from — you do
+not have to remember where it came from.
+
+    vault release 90f3b260f8
+
+Real output:
+
+    releasing 90f3b260f8  passport-scan.png
+      to \\?\C:\Users\you\Documents\passport-scan.png
+      released  \\?\C:\Users\you\Documents\passport-scan.png
+
+The file is back in Documents with its original name, its original
+bytes, and its original timestamp. The vault entry is removed, since
+the file is no longer hidden.
+
+The file is written to a temporary name first and renamed into place
+only after every encrypted chunk has been authenticated. A failure
+partway through therefore never leaves a half-written file where your
+real data should be, and never destroys the vault copy.
+
+Restore somewhere else entirely with `--to` (or `-t`):
+
+    vault release 90f3 --to "C:\Users\you\Desktop\restored.png"
+
+Keep the encrypted copy as well, if you want both:
+
+    vault release 90f3 --keep
+
+Refusing to overwrite — if the destination already exists, `release`
+stops and changes nothing:
+
+    releasing e50cd09cd7  passport-scan.png
+      to \\?\C:\Users\you\Documents\passport-scan.png
+    vault.exe : error: \\?\C:\Users\you\Documents\passport-scan.png already exists
+    pass --force to overwrite it
+
+To overwrite on purpose:
+
+    vault release e50cd09cd7 --force
+
+
+------------------------------------------------------------------------
+ 6. DESTROYING A FILE INSTEAD OF RESTORING IT
+------------------------------------------------------------------------
+
+`forget` decrypts nothing and restores nothing. It destroys the vault
+entry permanently.
+
+    vault forget 72f5c5613c
+
+It always shows you what it is about to destroy and asks first:
+
+    About to permanently destroy:
+      ID    72f5c5613c
+      name  secret-video.mp4
+      path  \\?\C:\Users\you\Documents\secret-video.mp4
+      size  13 B
+
+    There is no undo. Destroy it? [y/N] forgot 72f5c5613c
+
+Answering `n` (or just pressing Enter) cancels and leaves the entry
+alone. To skip the prompt — in scripts, or when you are certain — use
+`--yes`:
+
+    vault forget 72f5c5613c --yes
+
+`forget` removes the encrypted copy. It does NOT touch the original
+file if you hid it with `--copy`, and it does not touch anything at the
+original path.
+
+
+------------------------------------------------------------------------
+ 7. CLEANING UP WINDOWS TRACES
+------------------------------------------------------------------------
+
+Even after a file is hidden, Windows may still remember it: thumbnail
+caches, Recent Documents, Prefetch. `scrub` cleans up what it can:
+
+    vault scrub --previews --recent
+
+    --previews   purge Explorer thumbnail and icon caches
+    --recent     purge Recent Documents and Prefetch entries
+
+Pass neither flag and it prints that help text and does nothing, so
+you always know what you are about to run:
+
+    nothing selected — pass --previews, --recent, or both
+
+      --previews   purge Explorer thumbnail and icon caches
+      --recent     purge Recent Documents and Prefetch entries
+
+Add `--yes` to skip confirmation.
+
+Read this honestly: `scrub` reduces these traces but cannot promise
+forensic erasure. Explorer often holds thumbnail caches open, so some
+files are reported as skipped — it never kills Explorer to get at
+them, and you should not expect it to. See section 9.
+
+
+------------------------------------------------------------------------
+ 8. NON-INTERACTIVE USE (SCRIPTS, SCHEDULED TASKS)
+------------------------------------------------------------------------
+
+`vault` prompts for the password by reading directly from the
+console, which means a pipe cannot supply it. A password sent through
+stdin is refused on purpose: a password sitting in a pipe buffer or a
+parent process's output is a real leak. There is no workaround via
+pipe, heredoc, or pty on Windows.
+
+So for scripts, use one of these two flags.
+
+--- The password file -------------------------------------------------
+
+    vault --password-file pw.txt hide "C:\secret\photo.png"
+
+pw.txt should contain only the password. A trailing newline is stripped
+automatically, so this works:
+
+    echo my-password > pw.txt
+
+Importantly, the file is DECODED, not assumed to be UTF-8. That
+matters on Windows, because PowerShell's default redirection writes
+UTF-16LE with a byte-order mark, and cmd.exe writes in the ANSI code
+page:
+
+    echo my-password > pw.txt        # cmd.exe        → ANSI
+    echo my-password > pw.txt        # PowerShell      → UTF-16LE + BOM
+
+Both work. UTF-8 with or without a BOM works. An empty file is
+rejected:
+
+    vault.exe : error: password file C:\pw.txt is empty
+
+The environment variable VAULT_PASSWORD_FILE does the same thing:
+
+    set VAULT_PASSWORD_FILE=C:\pw.txt
+    vault list
+
+SECURITY NOTE: a password file is inherently less safe than an
+interactive prompt — anything that can read the file can read the
+password. Prefer the prompt for anything interactive, and restrict
+permissions on the file if you must keep one.
+
+--- The recovery key --------------------------------------------------
+
+    vault --recovery ad1df7d94660e56ca0589c90c3b1e961646e0e5451cc0645c14046d1ab79c857 list
+
+That is the 64-character hex key printed by `vault init`, given as a
+single line (so `vault init --raw` is the convenient companion).
+
+Real output, identical to a password unlock:
+
+    ID          NAME             SIZE  HIDDEN
+    ----------  ---------  ----------  ------------
+    95e310d715  notes.txt         3 B  just now
+
+    1 entries, 3 B total
+
+A wrong key is refused cleanly and modifies nothing:
+
+    vault.exe : error: wrong password (or recovery key) — nothing was modified
+
+--- Other global options ----------------------------------------------
+
+    --vault <DIR>        vault location        (env VAULT_DIR)
+    --password-file <F>  password from a file  (env VAULT_PASSWORD_FILE)
+    --recovery <HEX>     unlock with the recovery key
+
+These are global: they go BEFORE the subcommand, not after it.
+
+    vault --vault D:\v --password-file pw.txt list    ✓
+    vault list --password-file pw.txt                 ✗ unknown argument
+
+`--recovery` and `--password-file` cannot be combined.
+
+
+------------------------------------------------------------------------
+ 9. WHAT IT DOES AND DOES NOT GUARANTEE
+------------------------------------------------------------------------
+
+Honest limitations, so nothing here surprises you later.
+
+* Secure delete is best-effort on SSD and NVMe. `hide` overwrites the
+  original with random data before unlinking it, but TRIM and
+  wear-leveling mean that overwrite may never reach the physical cells
+  that hold the old data. The tool says so in its own messages. Do not
+  rely on `hide` alone as proof of physical erasure.
+
+* `scrub` cannot guarantee forensic removal. The USN journal and $MFT
+  are not reachable from user mode, and the tool says exactly that.
+
+* Passwords are re-derived on every command (Argon2id, roughly half a
+  second), so each invocation takes about that long. There is no
+  session caching. This is the cost of not keeping your key in memory
+  between runs.
+
+* Long paths are not yet handled. Releasing a deeply nested file may
+  fail until `\\?\` prefixing is added throughout.
+
+* Hiding a directory keeps its structure via the stored absolute path,
+  but there is no directory-level restore — entries come back
+  individually.
+
+* ADS (alternate data streams) are not wiped on secure delete.
+
+What it does do:
+
+* Real encryption — Argon2id key derivation plus XChaCha20-Poly1305
+  authenticated encryption, in 1 MiB chunks so a multi-gigabyte video
+  is never loaded into memory.
+
+* A random vault key that is never derived from your password. Your
+  password and your recovery key each only UNSEAL it, through two
+  independent encrypted seals. Someone who steals vault.hdr learns
+  nothing about the real key without breaking one of those seals.
+
+* No index file to go stale or leak. Each object describes itself, and
+  all of that self-description is inside the encryption.
+
+* Metadata encrypted alongside the data, so filenames, paths, sizes,
+  and timestamps never appear in the clear on disk.
+
+
+------------------------------------------------------------------------
+ 10. COMMAND REFERENCE
+------------------------------------------------------------------------
+
+    vault init       [--raw]
+    vault hide       <path>... [--copy]
+    vault list       [--paths] [--plain]
+    vault show       <id>
+    vault release    <id> [--to PATH] [--force] [--keep]
+    vault forget     <id> [--yes]
+    vault scrub      [--previews] [--recent] [--yes]
+
+Global (before the subcommand):
+
+    vault [--vault DIR] [--password-file FILE | --recovery HEX] <command>
+
+    <id> may be any unambiguous prefix of the ID shown by `vault list`.
+
+Environment variables:
+
+    VAULT_DIR              same as --vault
+    VAULT_PASSWORD_FILE    same as --password-file
+
+A typical session, start to finish:
+
+    vault init
+    vault hide "C:\Users\you\Documents\secret.png"
+    vault list
+    vault release 90f3b260f8
+    vault list                 → vault is empty
+
+
+------------------------------------------------------------------------
+ 11. FORGETTING YOUR PASSWORD
+------------------------------------------------------------------------
+
+You have exactly two ways in:
+
+  1. Your master password.
+  2. The recovery key printed by `vault init`.
+
+If you lose the password, use the recovery key:
+
+    vault --recovery <64-hex-characters> list
+
+You can then release every file. To switch back to a password you can
+remember, create a fresh vault with `vault init`, release everything
+into it from the old one, and re-hide.
+
+If you lose BOTH, the files cannot be recovered. There is no reset,
+no support line, no escrow. That is the trade-off for the vault being
+unopenable by anyone else.
+
+So: write the recovery key on paper, and put the paper somewhere that
+is not your computer.
+
+
+------------------------------------------------------------------------
+ 12. VERIFYING THE BUILD (FOR THE CURIOUS)
+------------------------------------------------------------------------
+
+Four checks, run from this folder, in order:
+
+    cargo fmt --check
+    cargo clippy --all-targets -- -D warnings
+    cargo test
+    python scripts\e2e.py
+
+`cargo test` covers the encryption layer only. The last command is
+what actually drives target\release\vault.exe through init → hide →
+list → show → release → forget and asserts that files really do vanish
+and really do come back byte-identical. It does not rebuild anything,
+so run `cargo build --release` first.
+
+========================================================================
