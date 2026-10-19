@@ -35,11 +35,14 @@ pub struct Cli {
     pub password_file: Option<PathBuf>,
 
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Open the interactive menu (also what you get with no subcommand).
+    Menu,
+
     /// Create a new vault and set the master password.
     Init(InitArgs),
 

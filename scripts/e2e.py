@@ -138,9 +138,17 @@ def main():
     code, out = run(["list", "--plain"], vault_dir, pwfile)
     check("list --plain exits 0", code == 0, out)
     rows = [r for r in out.strip().splitlines() if r.strip()]
-    check("list --plain emits one row", len(rows) == 1, out)
-    if rows:
-        check("list --plain starts with the ID", rows[0].startswith(entry_id), rows[0])
+    check("list --plain emits folder and file rows", len(rows) == 2, out)
+    check(
+        "list --plain includes the file ID",
+        any(row.startswith(entry_id) for row in rows),
+        out,
+    )
+    check(
+        "list --plain includes a folder ID",
+        any("\twork/" in row for row in rows),
+        out,
+    )
 
     print("\n[6] show")
     code, out = run(["show", entry_id], vault_dir, pwfile)

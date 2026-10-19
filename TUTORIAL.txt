@@ -37,6 +37,16 @@ To see every command:
 
     vault --help
 
+To use the visual terminal menu instead of restarting `vault` for every
+operation, run it with no subcommand:
+
+    vault
+
+Use the arrow keys to move through the cyan menu, press Enter to select,
+and press `q` to leave. The existing commands remain available for scripts
+and precise one-shot use. Password prompts still use the same hidden input
+path as the regular commands.
+
 
 ------------------------------------------------------------------------
  2. FIRST RUN — CREATE YOUR VAULT
@@ -200,13 +210,16 @@ more characters rather than guessing which file you meant.
 Two more views for `list`:
 
     vault list --paths     also show where each file came from
-    vault list --plain     one entry per line, tab-separated, for scripts
+    vault list --plain     one target per line, tab-separated, for scripts
 
 `--plain` output looks like this:
 
     90f3b260f8  19  1792301042  passport-scan.png  \\?\C:\...\passport-scan.png
+    4ab18c77d1  19  1792301042  Documents/  \\?\C:\...\Documents\ (folder, 1 files)
 
-(fields: ID, size, hidden-epoch-seconds, name, original path)
+(fields: ID, size, hidden-epoch-seconds, name, original path). Folder
+targets have their own ID and aggregate the files below that folder, so
+the same ID can be passed to `show`, `release`, or `forget`.
 
 
 ------------------------------------------------------------------------

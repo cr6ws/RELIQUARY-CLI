@@ -1,26 +1,28 @@
 use anyhow::{bail, Context, Result};
 use rand::RngCore;
+use std::path::PathBuf;
 use zeroize::Zeroizing;
 
 use crate::cli::InitArgs;
 use crate::crypto::kdf;
 use crate::crypto::keys::{hkdf_expand, random_bytes, seal, VaultKeys};
 use crate::crypto::vault::{random_root_key, VaultDir, VaultHeader};
+use crate::session::Credential;
 
-pub fn run(
-    args: InitArgs,
-    vault_dir: Option<std::path::PathBuf>,
-    password_file: Option<std::path::PathBuf>,
-) -> Result<()> {
+pub fn run(args: InitArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Result<()> {
     let dir = VaultDir::resolve(vault_dir)?;
     dir.create()?;
 
     // With a password file there is no second party to confirm against, so
     // the file is the single source of truth. Interactive init still
     // confirms twice — a typo here means a permanently inaccessible vault.
-    let password = match password_file {
-        Some(path) => crate::session::read_password_file(&path)?,
-        None => prompt_new_password()?,
+    //
+    // A recovery key is ignored rather than rejected, which is what `vault
+    // init --recovery` has always done: init sets a *new* password, and the
+    // recovery key has no say in that.
+    let password = match cred {
+        Credential::File(path) => crate::session::read_password_file(path)?,
+        _ => prompt_new_password()?,
     };
 
     let mut salt = [0u8; kdf::SALT_LEN];

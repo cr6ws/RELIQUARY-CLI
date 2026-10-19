@@ -3,16 +3,11 @@ use std::path::PathBuf;
 
 use crate::cli::ListArgs;
 use crate::object::Object;
-use crate::session::Session;
+use crate::session::{Credential, Session};
 
-pub fn run(
-    args: ListArgs,
-    vault_dir: Option<PathBuf>,
-    recovery: Option<String>,
-    password_file: Option<PathBuf>,
-) -> Result<()> {
+pub fn run(args: ListArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Result<()> {
     let dir = Session::locate(vault_dir)?;
-    let session = Session::unlock(dir, recovery.as_deref(), password_file.as_deref())?;
+    let session = Session::unlock(dir, cred)?;
 
     let objects = session.objects()?;
     if objects.is_empty() {
@@ -36,7 +31,27 @@ pub fn run(
     // Most recently hidden first — that's usually what you're looking for.
     entries.sort_by_key(|(_, m)| std::cmp::Reverse(m.hidden_at));
 
+    let folder_groups = crate::session::discover_folders(&entries);
+
     if args.plain {
+        // Keep the existing five-column machine-readable shape, but include
+        // synthetic folder targets before their individual file objects.
+        // This makes a folder ID usable by scripts as well as the human table.
+        for folder in &folder_groups {
+            println!(
+                "{}\t{}\t{}\t{}\t{}",
+                folder.id,
+                folder.total_size,
+                folder.latest_hidden_at,
+                format!("{}/", folder.name).escape_debug(),
+                format!(
+                    "{}\\ (folder, {} files)",
+                    folder.path.display(),
+                    folder.objects.len()
+                )
+                .escape_debug(),
+            );
+        }
         for (obj, meta) in &entries {
             println!(
                 "{}\t{}\t{}\t{}\t{}",
@@ -50,9 +65,63 @@ pub fn run(
         return Ok(());
     }
 
-    let name_w = entries
+    struct ListItem {
+        id: String,
+        name: String,
+        size: u64,
+        hidden_at: i64,
+        path_str: String,
+        is_dir: bool,
+    }
+
+    let mut items = Vec::new();
+
+    for fg in &folder_groups {
+        items.push(ListItem {
+            id: fg.id.clone(),
+            name: format!("{}/", fg.name),
+            size: fg.total_size,
+            hidden_at: fg.latest_hidden_at,
+            path_str: format!(
+                "{}\\ (folder, {} files)",
+                fg.path.display(),
+                fg.objects.len()
+            ),
+            is_dir: true,
+        });
+    }
+
+    for (obj, meta) in &entries {
+        let is_dir = meta.ext == "dir";
+        let display_name = if is_dir {
+            format!("{}/", meta.orig_name)
+        } else {
+            meta.orig_name.clone()
+        };
+        let path_str = if is_dir {
+            format!("{}\\ (folder archive)", meta.orig_path.display())
+        } else {
+            meta.orig_path.display().to_string()
+        };
+        items.push(ListItem {
+            id: id_of(obj),
+            name: display_name,
+            size: meta.size,
+            hidden_at: meta.hidden_at,
+            path_str,
+            is_dir,
+        });
+    }
+
+    items.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| b.hidden_at.cmp(&a.hidden_at))
+    });
+
+    let name_w = items
         .iter()
-        .map(|(_, m)| m.orig_name.chars().count())
+        .map(|item| item.name.chars().count())
         .max()
         .unwrap_or(4)
         .clamp(4, 48);
@@ -74,28 +143,55 @@ pub fn run(
         name_w = name_w
     );
 
-    for (obj, meta) in &entries {
-        let name = truncate(&meta.orig_name, name_w);
+    for item in &items {
+        let name = truncate(&item.name, name_w);
         println!(
             "{:<10}  {:<name_w$}  {:>10}  {:<12}",
-            id_of(obj),
+            item.id,
             name,
-            human_size(meta.size),
-            format_age(meta.hidden_at),
+            human_size(item.size),
+            format_age(item.hidden_at),
             name_w = name_w
         );
     }
 
     println!();
-    println!(
-        "{} entries, {} total",
-        entries.len(),
-        human_size(entries.iter().map(|(_, m)| m.size).sum())
-    );
+    let file_count = entries.iter().filter(|(_, m)| m.ext != "dir").count();
+    let folder_count = items.iter().filter(|item| item.is_dir).count();
+    let total_bytes: u64 = entries.iter().map(|(_, m)| m.size).sum();
+
+    if folder_count > 0 {
+        println!(
+            "{} items ({} folder{}, {} file{}), {} total",
+            items.len(),
+            folder_count,
+            if folder_count == 1 { "" } else { "s" },
+            file_count,
+            if file_count == 1 { "" } else { "s" },
+            human_size(total_bytes)
+        );
+    } else {
+        println!(
+            "{} entries, {} total",
+            entries.len(),
+            human_size(total_bytes)
+        );
+    }
+
     if args.paths {
         println!();
-        for (obj, meta) in &entries {
-            println!("{}  {}", id_of(obj), meta.orig_path.display());
+        for folder in &folder_groups {
+            println!(
+                "{}  {}/  {} files",
+                folder.id,
+                folder.path.display(),
+                folder.objects.len()
+            );
+        }
+        for item in &items {
+            if !item.is_dir {
+                println!("{}  {}", item.id, item.path_str);
+            }
         }
     }
 

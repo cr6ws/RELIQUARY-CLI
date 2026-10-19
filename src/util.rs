@@ -1,5 +1,27 @@
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use zeroize::Zeroizing;
+
+/// Clean a user-supplied path by trimming whitespace and stripping any
+/// surrounding double or single quotes.
+///
+/// Windows "Copy as path" always wraps copied paths in double quotes, e.g.
+/// `"C:\path\to\folder"`. Leaving quotes in place causes Windows OS error 123
+/// ("The filename, directory name, or volume label syntax is incorrect").
+pub fn clean_path(s: &str) -> PathBuf {
+    let trimmed = s.trim();
+    let unquoted = trimmed
+        .strip_prefix('"')
+        .and_then(|t| t.strip_suffix('"'))
+        .or_else(|| {
+            trimmed
+                .strip_prefix('\'')
+                .and_then(|t| t.strip_suffix('\''))
+        })
+        .unwrap_or(trimmed);
+    PathBuf::from(unquoted.trim())
+}
 
 /// Prompt for the vault password on the terminal.
 ///
@@ -72,4 +94,41 @@ fn civil_from_unix(secs: i64) -> (i64, u32, u32, u32, u32) {
     let y = if m <= 2 { y + 1 } else { y };
 
     (y, m, d, (rem / 3600) as u32, ((rem % 3600) / 60) as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_path_strips_double_quotes() {
+        assert_eq!(
+            clean_path(r#""C:\Users\johnc\Desktop\DESKTOP FOLDER\backup""#),
+            PathBuf::from(r#"C:\Users\johnc\Desktop\DESKTOP FOLDER\backup"#)
+        );
+    }
+
+    #[test]
+    fn clean_path_strips_single_quotes() {
+        assert_eq!(
+            clean_path(r#"'C:\Users\johnc\Desktop\backup'"#),
+            PathBuf::from(r#"C:\Users\johnc\Desktop\backup"#)
+        );
+    }
+
+    #[test]
+    fn clean_path_trims_whitespace_around_quotes() {
+        assert_eq!(
+            clean_path(r#"  "C:\Users\johnc\Desktop\backup"   "#),
+            PathBuf::from(r#"C:\Users\johnc\Desktop\backup"#)
+        );
+    }
+
+    #[test]
+    fn clean_path_preserves_unquoted_paths() {
+        assert_eq!(
+            clean_path(r#"C:\Users\johnc\Desktop\backup"#),
+            PathBuf::from(r#"C:\Users\johnc\Desktop\backup"#)
+        );
+    }
 }

@@ -5,6 +5,7 @@ use zeroize::Zeroizing;
 use crate::crypto::kdf;
 use crate::crypto::keys::{hkdf_expand, open, VaultKeys, KEY_LEN};
 use crate::crypto::vault::{SealedKey, VaultDir, VaultHeader};
+use crate::object::{Meta, Object};
 
 /// An unlocked vault, holding the derived keys for the lifetime of one command.
 ///
@@ -29,25 +30,23 @@ impl Session {
         Ok(dir)
     }
 
-    /// Unlock using whichever credential the user supplied.
+    /// Unlock using whichever credential the caller supplied.
     ///
     /// This is the single entry point every command should use, so that
-    /// `--recovery` and `--password-file` behave identically everywhere.
-    /// Password prompts are centralized here for the same reason — no
-    /// command should be able to accidentally prompt with echo enabled by
-    /// calling rpassword directly.
-    pub fn unlock(
-        dir: VaultDir,
-        recovery: Option<&str>,
-        password_file: Option<&Path>,
-    ) -> Result<Self> {
-        match recovery {
-            Some(hex) => Self::unlock_recovery(dir, hex),
-            None => {
-                let password = match password_file {
-                    Some(path) => read_password_file(path)?,
-                    None => crate::util::prompt_password()?,
-                };
+    /// `--recovery`, `--password-file` and an interactive prompt all behave
+    /// identically everywhere. Password prompts are centralized here for the
+    /// same reason — no command should be able to accidentally prompt with
+    /// echo enabled by calling rpassword directly.
+    pub fn unlock(dir: VaultDir, cred: &Credential) -> Result<Self> {
+        match cred {
+            Credential::Recovery(hex) => Self::unlock_recovery(dir, hex),
+            Credential::File(path) => {
+                let password = read_password_file(path)?;
+                Self::unlock_password(dir, &password)
+            }
+            Credential::Password(password) => Self::unlock_password(dir, password),
+            Credential::Prompt => {
+                let password = crate::util::prompt_password()?;
                 Self::unlock_password(dir, &password)
             }
         }
@@ -105,6 +104,7 @@ impl Session {
     ///
     /// Accepts any unambiguous prefix so `vault release a3f9` works without
     /// typing the full ID. Errors on ambiguity rather than guessing.
+    #[allow(dead_code)]
     pub fn resolve_id(&self, id: &str) -> Result<PathBuf> {
         let objects = self.objects()?;
         if objects.is_empty() {
@@ -127,6 +127,228 @@ impl Session {
                 matches.len()
             ),
         }
+    }
+
+    /// Resolve a user-supplied ID, prefix, or folder name to a Target.
+    /// Supports individual objects, native folder archives, and folder groups.
+    pub fn resolve_target(&self, id: &str) -> Result<Target> {
+        let objects = self.objects()?;
+        if objects.is_empty() {
+            bail!("the vault is empty");
+        }
+
+        let mut entries = Vec::with_capacity(objects.len());
+        for obj in &objects {
+            if let Ok(meta) = Object::read_meta(self.keys(), obj) {
+                entries.push((obj.clone(), meta));
+            }
+        }
+
+        let clean_id = id.trim().trim_end_matches('/');
+        let folders = discover_folders(&entries);
+
+        // 1. Exact match on object ID or exact file name
+        for (obj, meta) in &entries {
+            let stem = obj.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+            if stem == clean_id {
+                return Ok(Target::Object(obj.clone()));
+            }
+            if meta.orig_name.eq_ignore_ascii_case(clean_id) {
+                return Ok(Target::Object(obj.clone()));
+            }
+        }
+
+        // 2. Exact match on folder ID or exact folder name
+        for folder in &folders {
+            if folder.id == clean_id || folder.name.eq_ignore_ascii_case(clean_id) {
+                return Ok(Target::Folder(folder.clone()));
+            }
+        }
+
+        // 3. Prefix matching
+        let mut obj_matches: Vec<PathBuf> = Vec::new();
+        for (obj, _) in &entries {
+            let stem = obj.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+            if stem.starts_with(clean_id) {
+                obj_matches.push(obj.clone());
+            }
+        }
+
+        let mut folder_matches: Vec<FolderGroup> = Vec::new();
+        for folder in &folders {
+            if folder.id.starts_with(clean_id)
+                || folder
+                    .name
+                    .to_lowercase()
+                    .starts_with(&clean_id.to_lowercase())
+            {
+                folder_matches.push(folder.clone());
+            }
+        }
+
+        let total_matches = obj_matches.len() + folder_matches.len();
+        match total_matches {
+            0 => bail!("no entry matches id `{id}`"),
+            1 => {
+                if let Some(obj) = obj_matches.into_iter().next() {
+                    Ok(Target::Object(obj))
+                } else {
+                    Ok(Target::Folder(folder_matches.remove(0)))
+                }
+            }
+            _ => bail!("id `{id}` is ambiguous ({total_matches} matches) — use more characters"),
+        }
+    }
+}
+
+/// A target resolved from a user-supplied ID: either an individual object or a folder.
+#[derive(Clone, Debug)]
+pub enum Target {
+    /// A single vault object (.enc file, which could be a file or a native directory archive).
+    Object(PathBuf),
+    /// A folder grouping multiple vault objects.
+    Folder(FolderGroup),
+}
+
+/// Information about a folder group spanning multiple vault objects.
+#[derive(Clone, Debug)]
+pub struct FolderGroup {
+    pub id: String,
+    pub name: String,
+    pub path: PathBuf,
+    pub total_size: u64,
+    pub latest_hidden_at: i64,
+    pub objects: Vec<(PathBuf, Meta)>,
+}
+
+/// Compute a deterministic 10-hex character ID for a folder path.
+pub fn folder_id(path: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    let norm = path.to_string_lossy().replace('/', "\\").to_lowercase();
+    let hash = Sha256::digest(norm.as_bytes());
+    hex::encode(&hash[..5])
+}
+
+/// Discover folder groupings from a set of vault entries.
+///
+/// Traces containing directories of vault files so that entire directories
+/// can be inspected, released, or forgotten as a single unit.
+pub fn discover_folders(entries: &[(PathBuf, Meta)]) -> Vec<FolderGroup> {
+    use std::collections::HashMap;
+
+    let mut dir_map: HashMap<PathBuf, Vec<(PathBuf, Meta)>> = HashMap::new();
+
+    for (obj, meta) in entries {
+        // Skip native folder objects — they already have their own object ID
+        if meta.ext == "dir" {
+            continue;
+        }
+
+        // Trace every parent so the directory containing the files is always
+        // eligible, including Windows extended paths such as `\\?\C:\...`.
+        let mut curr = meta.orig_path.parent();
+        while let Some(parent) = curr {
+            dir_map
+                .entry(parent.to_path_buf())
+                .or_default()
+                .push((obj.clone(), meta.clone()));
+            curr = parent.parent();
+        }
+    }
+
+    let mut groups = Vec::new();
+    for (dir_path, objs) in dir_map {
+        if objs.is_empty() {
+            continue;
+        }
+        let name = dir_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "folder".to_string());
+        let id = folder_id(&dir_path);
+        let total_size = objs.iter().map(|(_, m)| m.size).sum();
+        let latest_hidden_at = objs.iter().map(|(_, m)| m.hidden_at).max().unwrap_or(0);
+
+        groups.push(FolderGroup {
+            id,
+            name,
+            path: dir_path,
+            total_size,
+            latest_hidden_at,
+            objects: objs,
+        });
+    }
+
+    // The same files naturally produce a group for every ancestor directory.
+    // Keep the deepest directory for an identical object set; otherwise a
+    // vault containing C:\work\docs would also advertise C:\Users and C:\.
+    let filtered_groups: Vec<FolderGroup> = groups
+        .iter()
+        .filter(|group| {
+            !groups.iter().any(|other| {
+                other.path != group.path
+                    && other.objects.len() == group.objects.len()
+                    && other
+                        .objects
+                        .iter()
+                        .map(|(obj, _)| obj)
+                        .eq(group.objects.iter().map(|(obj, _)| obj))
+                    && other.path.starts_with(&group.path)
+            })
+        })
+        .cloned()
+        .collect();
+
+    let mut groups = filtered_groups;
+    groups.sort_by_key(|g| std::cmp::Reverse(g.latest_hidden_at));
+    groups
+}
+
+/// Prefix of the message produced when a sealed value fails to open.
+///
+/// The interactive menu watches for this to decide whether its cached password
+/// has gone stale, so the wording `unseal_root` builds from it must stay in
+/// sync. It is a prefix rather than the whole message because the tail names
+/// the recovery key too, which the menu has no use for.
+pub const AUTH_FAILED: &str = "wrong password";
+
+/// How the caller wants to prove they own the vault.
+///
+/// The CLI fills this from `--recovery` / `--password-file`, falling back to
+/// `Prompt`. The interactive menu holds a `Password` for as long as it is open
+/// so the user is not re-prompted after every arrow-key selection; `Zeroizing`
+/// wipes it when the menu exits.
+///
+/// No `Debug` impl on purpose — a stray `{:?}` must not be able to print a
+/// live master password to a log.
+#[derive(Clone)]
+pub enum Credential {
+    /// Ask on the terminal, with echo disabled.
+    Prompt,
+    /// Read the password from a file (scripting).
+    File(PathBuf),
+    /// The 64-hex recovery key printed by `vault init`.
+    Recovery(String),
+    /// Already in memory.
+    Password(Zeroizing<String>),
+}
+
+impl Credential {
+    /// Build the credential the command line asks for.
+    ///
+    /// `clap` marks `--recovery` and `--password-file` as conflicting, so
+    /// recovery winning here can never silently override a password file.
+    pub fn new(recovery: Option<String>, password_file: Option<PathBuf>) -> Self {
+        match (recovery, password_file) {
+            (Some(hex), _) => Credential::Recovery(hex),
+            (None, Some(path)) => Credential::File(path),
+            (None, None) => Credential::Prompt,
+        }
+    }
+
+    /// True when a password still has to be obtained from the user.
+    pub fn needs_prompt(&self) -> bool {
+        matches!(self, Credential::Prompt)
     }
 }
 
@@ -220,7 +442,7 @@ fn unseal_root(sealed: &SealedKey, key: &[u8; KEY_LEN], aad: &[u8]) -> Result<[u
     let mut out = [0u8; KEY_LEN];
     out.copy_from_slice(
         &open(key, &sealed.nonce, &sealed.ct, aad).map_err(|_| {
-            anyhow::anyhow!("wrong password (or recovery key) — nothing was modified")
+            anyhow::anyhow!("{AUTH_FAILED} (or recovery key) — nothing was modified")
         })?,
     );
     Ok(out)

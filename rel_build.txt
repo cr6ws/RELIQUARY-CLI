@@ -1,0 +1,2 @@
+   Compiling vault v0.1.0 (C:\Users\johnc\Desktop\sms)
+    Finished `release` profile [optimized] target(s) in 25.10s
