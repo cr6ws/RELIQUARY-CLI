@@ -134,16 +134,19 @@ impl VaultHeader {
         use std::io::Read;
 
         let mut f = std::fs::File::open(path)
-            .with_context(|| format!("no vault found at {}", path.display()))?;
+            .with_context(|| format!("no reliquary found at {}", path.display()))?;
 
         let mut buf = vec![0u8; Self::LEN];
         f.read_exact(&mut buf)
-            .context("vault header is truncated")?;
+            .context("reliquary header is truncated")?;
 
         let mut cur = Cursor::new(&buf);
         let magic = cur.take(8);
         if magic != MAGIC {
-            bail!("{} is not a vault header (bad magic bytes)", path.display());
+            bail!(
+                "{} is not a reliquary header (bad magic bytes)",
+                path.display()
+            );
         }
 
         let salt = cur.take(kdf::SALT_LEN).try_into().unwrap();
@@ -157,7 +160,7 @@ impl VaultHeader {
             || !(1..=64).contains(&t_cost)
             || !(1..=64).contains(&p_cost)
         {
-            bail!("vault header has invalid KDF parameters");
+            bail!("reliquary header has invalid KDF parameters");
         }
 
         Ok(Self {
@@ -214,7 +217,7 @@ impl VaultDir {
                 let home = std::env::var("USERPROFILE")
                     .or_else(|_| std::env::var("HOME"))
                     .context("cannot determine home directory")?;
-                PathBuf::from(home).join(".vault")
+                PathBuf::from(home).join(".reliquary")
             }
         };
         Ok(Self { root })
@@ -235,7 +238,7 @@ impl VaultDir {
     /// Create the directory tree for a brand new vault. Refuses to clobber.
     pub fn create(&self) -> Result<()> {
         if self.exists() {
-            bail!("a vault already exists at {}", self.root.display());
+            bail!("a reliquary already exists at {}", self.root.display());
         }
         std::fs::create_dir_all(self.objects_dir())
             .with_context(|| format!("could not create {}", self.objects_dir().display()))?;

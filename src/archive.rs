@@ -83,7 +83,7 @@ pub fn unpack(reader: &mut dyn Read, dest_root: &Path) -> Result<usize> {
         .read_exact(&mut magic)
         .context("archive is empty or truncated")?;
     if &magic != VDIR_MAGIC {
-        bail!("not a valid vault directory archive (bad magic)");
+        bail!("not a valid reliquary directory archive (bad magic)");
     }
 
     let mut version = [0u8; 1];
@@ -197,7 +197,7 @@ pub fn list_entries(reader: &mut dyn Read) -> Result<Vec<(String, u64, bool)>> {
         .read_exact(&mut magic)
         .context("archive is empty or truncated")?;
     if &magic != VDIR_MAGIC {
-        bail!("not a valid vault directory archive (bad magic)");
+        bail!("not a valid reliquary directory archive (bad magic)");
     }
 
     let mut version = [0u8; 1];

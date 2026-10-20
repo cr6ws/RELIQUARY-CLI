@@ -29,7 +29,11 @@ pub fn run(args: ShowArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Res
                     format_size(meta.size),
                     meta.size
                 );
-                println!("Vault object  {} ({})", obj.display(), format_size(on_disk));
+                println!(
+                    "Reliquary object  {} ({})",
+                    obj.display(),
+                    format_size(on_disk)
+                );
                 println!("Hidden at     {}", format_timestamp(meta.hidden_at));
                 println!("Modified at   {}", format_timestamp(meta.mtime.0));
             } else {
@@ -41,7 +45,11 @@ pub fn run(args: ShowArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Res
                     format_size(meta.size),
                     meta.size
                 );
-                println!("Vault object  {} ({})", obj.display(), format_size(on_disk));
+                println!(
+                    "Reliquary object  {} ({})",
+                    obj.display(),
+                    format_size(on_disk)
+                );
                 println!(
                     "Extension     {}",
                     if meta.ext.is_empty() {

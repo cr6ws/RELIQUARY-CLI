@@ -1,11 +1,11 @@
 [package]
-name = "vault"
+name = "reliquary"
 version = "0.1.0"
 edition = "2021"
-description = "Personal encrypted file vault — hide files, release them back"
+description = "Personal encrypted file reliquary — hide files, release them back"
 
 [[bin]]
-name = "vault"
+name = "reliquary"
 path = "src/main.rs"
 
 [dependencies]

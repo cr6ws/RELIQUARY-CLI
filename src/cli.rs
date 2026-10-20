@@ -1,27 +1,32 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-/// Personal encrypted file vault.
+/// Personal encrypted file reliquary.
 ///
 /// Hide files so they vanish from their original location, then release them
-/// back when you need them. Everything inside the vault is encrypted with a
+/// back when you need them. Everything inside the reliquary is encrypted with a
 /// key derived from your master password.
 #[derive(Parser, Debug)]
 #[command(
-    name = "vault",
+    name = "reliquary",
     version,
-    about,
+    about = "Personal encrypted file reliquary — hide files, release them back",
     long_about = None,
     propagate_version = true
 )]
 pub struct Cli {
-    /// Path to the vault directory. Defaults to ~/.vault
-    #[arg(long, global = true, env = "VAULT_DIR")]
+    /// Path to the reliquary directory. Defaults to ~/.reliquary
+    #[arg(
+        long = "reliquary",
+        alias = "vault",
+        global = true,
+        env = "RELIQUARY_DIR"
+    )]
     pub vault: Option<PathBuf>,
 
     /// Unlock with the recovery key instead of the master password.
     ///
-    /// Accepts the 64-character hex string printed by `vault init`.
+    /// Accepts the 64-character hex string printed by `reliquary init`.
     #[arg(long, global = true, conflicts_with = "password_file")]
     pub recovery: Option<String>,
 
@@ -31,7 +36,7 @@ pub struct Cli {
     /// trailing newline required. Reading from a file is inherently less safe
     /// than an interactive prompt — anything that can read the file can read
     /// the password — so prefer the prompt for interactive use.
-    #[arg(long, global = true, env = "VAULT_PASSWORD_FILE")]
+    #[arg(long, global = true, env = "RELIQUARY_PASSWORD_FILE")]
     pub password_file: Option<PathBuf>,
 
     #[command(subcommand)]
@@ -43,16 +48,16 @@ pub enum Command {
     /// Open the interactive menu (also what you get with no subcommand).
     Menu,
 
-    /// Create a new vault and set the master password.
+    /// Create a new reliquary and set the master password.
     Init(InitArgs),
 
-    /// Encrypt files and move them into the vault.
+    /// Encrypt files and move them into the reliquary.
     Hide(HideArgs),
 
-    /// List everything currently in the vault.
+    /// List everything currently in the reliquary.
     List(ListArgs),
 
-    /// Show full metadata for one vault entry.
+    /// Show full metadata for one reliquary entry.
     Show(ShowArgs),
 
     /// Decrypt an entry and return it to its original location.
@@ -98,7 +103,7 @@ pub struct ListArgs {
 
 #[derive(clap::Args, Debug)]
 pub struct ShowArgs {
-    /// Entry ID (a `vault list` ID, or any unambiguous prefix).
+    /// Entry ID (a `reliquary list` ID, or any unambiguous prefix).
     pub id: String,
 }
 
@@ -115,7 +120,7 @@ pub struct ReleaseArgs {
     #[arg(long)]
     pub force: bool,
 
-    /// Keep the encrypted copy in the vault after restoring.
+    /// Keep the encrypted copy in the reliquary after restoring.
     #[arg(long)]
     pub keep: bool,
 }

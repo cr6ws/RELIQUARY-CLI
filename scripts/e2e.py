@@ -17,7 +17,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-VAULT_EXE = Path(r"C:\Users\johnc\Desktop\sms\target\release\vault.exe")
+VAULT_EXE = Path(__file__).resolve().parents[1] / "target" / "release" / "reliquary.exe"
 PASSWORD = "correct horse battery staple"
 
 failures = []
@@ -26,7 +26,7 @@ checks = 0
 
 def run(args, vault_dir, pwfile=None):
     """Invoke the vault binary, supplying credentials non-interactively."""
-    cmd = [str(VAULT_EXE), "--vault", str(vault_dir)]
+    cmd = [str(VAULT_EXE), "--reliquary", str(vault_dir)]
     if pwfile is not None:
         cmd += ["--password-file", str(pwfile)]
     cmd += list(args)

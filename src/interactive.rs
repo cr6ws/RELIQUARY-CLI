@@ -15,9 +15,9 @@ use crate::cli::{
 use crate::crypto::vault::VaultDir;
 
 const ITEMS: [&str; 7] = [
-    "Initialize vault",
+    "Initialize reliquary",
     "Hide files",
-    "List vault",
+    "List reliquary",
     "Show entry",
     "Release entry",
     "Forget entry",
@@ -85,13 +85,13 @@ fn draw(selected: usize, vault_exists: bool) -> Result<()> {
 "#
         ),
         SetForegroundColor(Color::DarkGrey),
-        Print("\n  encrypted file vault  /  interactive console\n\n"),
+        Print("\n  encrypted file reliquary  /  interactive console\n\n"),
         SetForegroundColor(Color::White)
     )?;
 
     for (index, item) in ITEMS.iter().enumerate() {
         let label = if index == 0 && vault_exists {
-            "Initialize vault (already exists)"
+            "Initialize reliquary (already exists)"
         } else {
             item
         };
@@ -131,7 +131,7 @@ fn dispatch(
     password_file: Option<PathBuf>,
 ) -> Result<()> {
     if selected == 0 && vault_exists {
-        println!("\n  A vault already exists. Choose another operation.");
+        println!("\n  A reliquary already exists. Choose another operation.");
         return Ok(());
     }
 

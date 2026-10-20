@@ -72,7 +72,7 @@ pub fn decrypt_stream(
     for index in 0..expected_chunks {
         let mut len_buf = [0u8; 4];
         read_exact(reader, &mut len_buf)
-            .map_err(|_| anyhow!("vault is truncated — file is incomplete or corrupted"))?;
+            .map_err(|_| anyhow!("reliquary is truncated — file is incomplete or corrupted"))?;
         let plain_len = u32::from_le_bytes(len_buf) as usize;
 
         if plain_len == 0 || plain_len > CHUNK_SIZE {
@@ -81,7 +81,7 @@ pub fn decrypt_stream(
 
         let ct_len = plain_len + super::keys::TAG_LEN;
         read_exact(reader, &mut buf[..ct_len])
-            .map_err(|_| anyhow!("vault is truncated — file is incomplete or corrupted"))?;
+            .map_err(|_| anyhow!("reliquary is truncated — file is incomplete or corrupted"))?;
 
         let pt = open(key, &chunk_nonce(file_nonce, index), &buf[..ct_len], aad)
             .map_err(|_| anyhow!("authentication failed at chunk {index}"))?;
@@ -99,7 +99,7 @@ pub fn decrypt_stream(
     let mut trailing = [0u8; 1];
     match reader.read(&mut trailing) {
         Ok(0) => {}
-        Ok(_) => bail!("trailing data after the last chunk — vault is truncated or corrupt"),
+        Ok(_) => bail!("trailing data after the last chunk — reliquary is truncated or corrupt"),
         Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
         Err(e) => return Err(anyhow!("error checking for trailing data: {e}")),
     }

@@ -1,4 +1,4 @@
-//! The interactive menu — the face of `vault` when it is run with no
+//! The interactive menu — the face of `reliquary` when it is run with no
 //! subcommand.
 //!
 //! Design note: this is a *panel*, not a list. The wordmark is a chiselled
@@ -59,56 +59,27 @@ const HINTS: &str = "   ↑↓ move   Enter run   1-8 jump   q quit";
 
 // ── the wordmark ────────────────────────────────────────────────────────
 //
-// Eight columns per letter, six rows tall, joined by a single space: 44
+// Five columns per letter, six rows tall, joined by a single space: 53
 // columns total. Built from letters rather than pasted as one block so the
 // row count and the gradient are guaranteed to agree.
 
-const LETTER_V: [&str; 6] = [
-    "██    ██",
-    "██    ██",
-    " ██  ██ ",
-    "  ████  ",
-    "   ██   ",
-    "   ██   ",
-];
-const LETTER_A: [&str; 6] = [
-    "   ██   ",
-    "  ████  ",
-    " ██  ██ ",
-    "████████",
-    "██    ██",
-    "██    ██",
-];
-const LETTER_U: [&str; 6] = [
-    "██    ██",
-    "██    ██",
-    "██    ██",
-    "██    ██",
-    " ██  ██ ",
-    "  ████  ",
-];
-const LETTER_L: [&str; 6] = [
-    "██      ",
-    "██      ",
-    "██      ",
-    "██      ",
-    "██      ",
-    "████████",
-];
-const LETTER_T: [&str; 6] = [
-    "████████",
-    "   ██   ",
-    "   ██   ",
-    "   ██   ",
-    "   ██   ",
-    "   ██   ",
-];
+const LETTER_R: [&str; 6] = ["████ ", "█   █", "████ ", "█ █  ", "█  █ ", "█   █"];
+const LETTER_E: [&str; 6] = ["█████", "█    ", "████ ", "█    ", "█    ", "█████"];
+const LETTER_L: [&str; 6] = ["█    ", "█    ", "█    ", "█    ", "█    ", "█████"];
+const LETTER_I: [&str; 6] = ["█████", "  █  ", "  █  ", "  █  ", "  █  ", "█████"];
+const LETTER_Q: [&str; 6] = [" ███ ", "█   █", "█   █", "█ █ █", "█  █ ", " ████"];
+const LETTER_U: [&str; 6] = ["█   █", "█   █", "█   █", "█   █", "█   █", " ███ "];
+const LETTER_A: [&str; 6] = [" ███ ", "█   █", "█   █", "█████", "█   █", "█   █"];
+const LETTER_Y: [&str; 6] = ["█   █", "█   █", " ███ ", "  █  ", "  █  ", "  █  "];
 
 fn banner() -> [String; 6] {
     std::array::from_fn(|row| {
-        [LETTER_V, LETTER_A, LETTER_U, LETTER_L, LETTER_T]
-            .map(|letter| letter[row])
-            .join(" ")
+        [
+            LETTER_R, LETTER_E, LETTER_L, LETTER_I, LETTER_Q, LETTER_U, LETTER_A, LETTER_R,
+            LETTER_Y,
+        ]
+        .map(|letter| letter[row])
+        .join(" ")
     })
 }
 
@@ -148,7 +119,7 @@ const ITEMS: [Item; 8] = [
         action: Action::List,
         key: '2',
         label: "LIST",
-        desc: "show everything in the vault",
+        desc: "show everything in the reliquary",
         needs_vault: true,
     },
     Item {
@@ -183,7 +154,7 @@ const ITEMS: [Item; 8] = [
         action: Action::Init,
         key: '7',
         label: "INIT",
-        desc: "create a new vault",
+        desc: "create a new reliquary",
         needs_vault: false,
     },
     Item {
@@ -281,7 +252,7 @@ impl State {
             .collect()
     }
 
-    /// The credential a normal vault command should run with.
+    /// The credential a normal reliquary command should run with.
     fn credential(&self) -> Credential {
         match &self.base {
             Credential::Prompt => match &self.cached {
@@ -310,7 +281,7 @@ impl State {
                 self.cached = Some(password);
                 Ok(())
             }
-            Err(e) => Err(e.context("could not read the vault password")),
+            Err(e) => Err(e.context("could not read the reliquary password")),
         }
     }
 
@@ -368,14 +339,14 @@ fn item_line(con: &Console, item: &Item, selected: bool, enabled: bool) -> Strin
 fn status_line(state: &State) -> String {
     let root = VaultDir::resolve(state.vault_dir.clone())
         .map(|dir| dir.root.display().to_string())
-        .unwrap_or_else(|_| "(invalid vault path)".to_string());
+        .unwrap_or_else(|_| "(invalid reliquary path)".to_string());
 
     match state.entry_count() {
         Some(n) => {
             let unit = if n == 1 { "entry" } else { "entries" };
-            format!("   vault  {root}   ·   {n} {unit}")
+            format!("   reliquary  {root}   ·   {n} {unit}")
         }
-        None => format!("   vault  {root}   ·   no vault yet"),
+        None => format!("   reliquary  {root}   ·   no reliquary yet"),
     }
 }
 
@@ -389,8 +360,7 @@ fn render(con: &Console, state: &State, slot: usize) -> Vec<String> {
     lines.push(" ".repeat(LINE_W));
 
     for (row, text) in banner().into_iter().enumerate() {
-        // 6 + 44 + 6 centres the wordmark in the 56-column interior.
-        let padded = format!("      {text}      ");
+        let padded = format!(" {text} ");
         lines.push(title_line(&con.fg(BRASS[row], &fit(&padded, INNER_W))));
     }
 
@@ -598,7 +568,7 @@ fn execute(state: &mut State, item: &Item) -> Result<()> {
                 Some(util::clean_path(&to))
             };
             let force = util::confirm("overwrite the destination if it exists")?;
-            let keep = util::confirm("keep the encrypted copy in the vault")?;
+            let keep = util::confirm("keep the encrypted copy in the reliquary")?;
             commands::release::run(
                 ReleaseArgs {
                     id,
@@ -822,11 +792,11 @@ mod tests {
     }
 
     #[test]
-    fn the_wordmark_is_five_letters_six_rows_and_44_columns() {
+    fn the_wordmark_is_nine_letters_six_rows_and_53_columns() {
         let rows = banner();
         assert_eq!(rows.len(), 6);
         for (index, row) in rows.iter().enumerate() {
-            assert_eq!(row.chars().count(), 44, "banner row {index} of {row:?}");
+            assert_eq!(row.chars().count(), 53, "banner row {index} of {row:?}");
         }
     }
 

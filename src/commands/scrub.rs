@@ -15,7 +15,7 @@ pub fn run(args: ScrubArgs, _vault_dir: Option<PathBuf>) -> Result<()> {
         return Ok(());
     }
 
-    println!("This will clear Windows artifacts OUTSIDE the vault.");
+    println!("This will clear Windows artifacts OUTSIDE the reliquary.");
     println!("It cannot be undone, and it may affect other applications.");
     println!();
 

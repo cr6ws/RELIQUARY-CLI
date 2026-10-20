@@ -11,7 +11,7 @@ pub fn run(args: ListArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Res
 
     let objects = session.objects()?;
     if objects.is_empty() {
-        println!("vault is empty");
+        println!("reliquary is empty");
         return Ok(());
     }
 
@@ -24,7 +24,7 @@ pub fn run(args: ListArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Res
     }
 
     if entries.is_empty() {
-        println!("vault is empty");
+        println!("reliquary is empty");
         return Ok(());
     }
 

@@ -54,7 +54,7 @@ pub fn run(args: ReleaseArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> 
                         Err(e) => {
                             let _ = std::fs::remove_file(&temp_archive_path);
                             return Err(e.context(format!(
-                                "decryption failed — {} was NOT written, the vault copy is untouched",
+                                "decryption failed — {} was NOT written, the reliquary copy is untouched",
                                 dest.display()
                             )));
                         }
@@ -63,7 +63,7 @@ pub fn run(args: ReleaseArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> 
 
                 if restored.size != meta.size {
                     let _ = std::fs::remove_file(&temp_archive_path);
-                    bail!("restored size does not match the vault record — aborting");
+                    bail!("restored size does not match the reliquary record — aborting");
                 }
 
                 let mut in_file = std::fs::File::open(&temp_archive_path).with_context(|| {
@@ -89,7 +89,7 @@ pub fn run(args: ReleaseArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> 
                     );
                 } else {
                     println!(
-                        "released folder {} ({} files) to {} (vault copy kept)",
+                        "released folder {} ({} files) to {} (reliquary copy kept)",
                         meta.orig_name,
                         file_count,
                         dest.display()
@@ -183,7 +183,7 @@ fn release_single_file(
             Err(e) => {
                 let _ = std::fs::remove_file(&tmp);
                 return Err(e.context(format!(
-                    "decryption failed — {} was NOT written, the vault copy is untouched",
+                    "decryption failed — {} was NOT written, the reliquary copy is untouched",
                     dest.display()
                 )));
             }
@@ -192,7 +192,7 @@ fn release_single_file(
 
     if restored.size != meta.size {
         let _ = std::fs::remove_file(&tmp);
-        bail!("restored size does not match the vault record — aborting");
+        bail!("restored size does not match the reliquary record — aborting");
     }
 
     std::fs::rename(&tmp, dest).with_context(|| {
@@ -214,7 +214,7 @@ fn release_single_file(
             .with_context(|| format!("restored OK, but could not remove {}", obj.display()))?;
         println!("released  {}", dest.display());
     } else {
-        println!("released  {} (vault copy kept)", dest.display());
+        println!("released  {} (reliquary copy kept)", dest.display());
     }
 
     Ok(())

@@ -170,7 +170,7 @@ impl Object {
         let mut magic = [0u8; 8];
         f.read_exact(&mut magic).context("object is truncated")?;
         if &magic != OBJ_MAGIC {
-            bail!("not a vault object (bad magic)");
+            bail!("not a reliquary object (bad magic)");
         }
 
         let mut len_buf = [0u8; 4];
@@ -194,7 +194,9 @@ impl Object {
         let meta_nonce = derive_nonce(&file_nonce, NONCE_TAG_META, 0);
 
         let plain = open(&keys.meta, &meta_nonce, &meta_ct, &aad).map_err(|_| {
-            anyhow!("could not decrypt object metadata — wrong password, or the vault is corrupted")
+            anyhow!(
+                "could not decrypt object metadata — wrong password, or the reliquary is corrupted"
+            )
         })?;
 
         let meta: Meta = bincode::deserialize(&plain).context("metadata is malformed")?;

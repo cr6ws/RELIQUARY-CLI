@@ -23,13 +23,13 @@ pub fn clean_path(s: &str) -> PathBuf {
     PathBuf::from(unquoted.trim())
 }
 
-/// Prompt for the vault password on the terminal.
+/// Prompt for the reliquary password on the terminal.
 ///
 /// Kept in one place so every command behaves identically and no command
 /// accidentally falls back to an echo-enabled read.
 pub fn prompt_password() -> Result<Zeroizing<String>> {
     Ok(Zeroizing::new(
-        rpassword::prompt_password("Vault password: ").context("could not read password")?,
+        rpassword::prompt_password("Reliquary password: ").context("could not read password")?,
     ))
 }
 

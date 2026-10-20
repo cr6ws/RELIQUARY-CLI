@@ -66,7 +66,7 @@ pub fn run(args: HideArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Res
 
     println!();
     println!(
-        "{} hidden, {} failed, {} total in vault",
+        "{} hidden, {} failed, {} total in reliquary",
         ok,
         failed,
         session.objects()?.len()

@@ -23,7 +23,7 @@ impl Session {
         let dir = VaultDir::resolve(explicit)?;
         if !dir.exists() {
             bail!(
-                "no vault found at {}\nrun `vault init` to create one",
+                "no reliquary found at {}\nrun `reliquary init` to create one",
                 dir.root.display()
             );
         }
@@ -108,7 +108,7 @@ impl Session {
     pub fn resolve_id(&self, id: &str) -> Result<PathBuf> {
         let objects = self.objects()?;
         if objects.is_empty() {
-            bail!("the vault is empty");
+            bail!("the reliquary is empty");
         }
 
         let mut matches = Vec::new();
@@ -134,7 +134,7 @@ impl Session {
     pub fn resolve_target(&self, id: &str) -> Result<Target> {
         let objects = self.objects()?;
         if objects.is_empty() {
-            bail!("the vault is empty");
+            bail!("the reliquary is empty");
         }
 
         let mut entries = Vec::with_capacity(objects.len());

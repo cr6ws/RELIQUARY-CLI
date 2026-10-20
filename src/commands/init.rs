@@ -54,15 +54,15 @@ pub fn run(args: InitArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Res
     let header = VaultHeader::new(salt, seals);
     header
         .write(&dir.header_path())
-        .context("could not write vault header")?;
+        .context("could not write reliquary header")?;
 
     // Read the header back before declaring success. Catching a malformed
     // write here is far cheaper than discovering it after the user has
     // deleted their originals.
     let reread = VaultHeader::read(&dir.header_path())
-        .context("vault was written but could not be read back")?;
+        .context("reliquary was written but could not be read back")?;
     if reread.salt != salt {
-        bail!("vault self-test failed — header did not round-trip");
+        bail!("reliquary self-test failed — header did not round-trip");
     }
 
     // Confirm the derived keys are usable before telling the user they are
@@ -74,11 +74,11 @@ pub fn run(args: InitArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Res
         b"self-test",
         b"vault.v1.init-check",
     )
-    .context("vault self-test failed")?;
+    .context("reliquary self-test failed")?;
 
     let recovery_hex = hex::encode(*recovery_raw);
 
-    println!("Vault created at {}", dir.root.display());
+    println!("Reliquary created at {}", dir.root.display());
     println!();
     println!("RECOVERY KEY — write this down and store it offline");
     println!("---------------------------------------------");
@@ -88,7 +88,7 @@ pub fn run(args: InitArgs, vault_dir: Option<PathBuf>, cred: &Credential) -> Res
     println!("This is the ONLY way back in if you forget your master password.");
     println!("It is not stored on disk. If you lose both, the files are gone.");
     println!();
-    println!("Try it now:  vault list");
+    println!("Try it now:  reliquary list");
 
     Ok(())
 }
